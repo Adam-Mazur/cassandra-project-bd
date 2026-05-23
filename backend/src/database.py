@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+from cassandra import ConsistencyLevel
+from cassandra.cluster import Cluster
 from fastapi import FastAPI, Request
 from abc import ABC, abstractmethod
 from uuid import uuid4, UUID
@@ -143,9 +145,142 @@ class InMemoryDatabase(Database):
         return success
 
 
+class CassandraDatabase(Database):
+    def __init__(
+        self,
+        contact_points: list[str] | None = None,
+        port: int = 9042,
+        keyspace: str = "movie_reservations",
+    ):
+        self.contact_points = contact_points or ["127.0.0.1", "127.0.0.2"]
+        self.port = port
+        self.keyspace = keyspace
+        self.cluster = None
+        self.session = None
+
+    def connect(self):
+        if self.session is not None:
+            return
+
+        self.cluster = Cluster(contact_points=self.contact_points, port=self.port)
+        self.session = self.cluster.connect()
+        self.session.default_consistency_level = ConsistencyLevel.LOCAL_QUORUM
+        self.session.execute(
+            f"CREATE KEYSPACE IF NOT EXISTS {self.keyspace} WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}"
+        )
+        self.session.set_keyspace(self.keyspace)
+        self.session.execute(
+            "CREATE TABLE IF NOT EXISTS movies (movie_id uuid PRIMARY KEY, title text, duration int)"
+        )
+        self.session.execute(
+            "CREATE TABLE IF NOT EXISTS cinemas (cinema_id uuid PRIMARY KEY, name text, location text)"
+        )
+        self.session.execute(
+            "CREATE TABLE IF NOT EXISTS users (user_id uuid PRIMARY KEY, name text, email text)"
+        )
+        self.session.execute(
+            "CREATE TABLE IF NOT EXISTS reservations (reservation_id uuid PRIMARY KEY, user_id uuid, movie_id uuid, cinema_id uuid, seat_number int)"
+        )
+
+    def disconnect(self):
+        if self.session is not None:
+            self.session.shutdown()
+            self.session = None
+        if self.cluster is not None:
+            self.cluster.shutdown()
+            self.cluster = None
+
+    def make_reservation(
+        self, user_id: UUID, movie_id: UUID, cinema_id: UUID, seat_number: int
+    ) -> UUID:
+        reservation_id = uuid4()
+        result = self.session.execute(
+            "INSERT INTO reservations (reservation_id, user_id, movie_id, cinema_id, seat_number) VALUES (%s, %s, %s, %s, %s) IF NOT EXISTS",
+            (reservation_id, user_id, movie_id, cinema_id, seat_number),
+        )
+        if not result.one().applied:
+            raise RuntimeError("Failed to create reservation")
+        return reservation_id
+
+    def change_reservation(self, reservation_id: UUID, new_seat_number: int) -> bool:
+        result = self.session.execute(
+            "UPDATE reservations SET seat_number = %s WHERE reservation_id = %s IF EXISTS",
+            (new_seat_number, reservation_id),
+        )
+        return result.one().applied
+
+    def get_reservations(self):
+        return [
+            row._asdict()
+            for row in self.session.execute(
+                "SELECT reservation_id, user_id, movie_id, cinema_id, seat_number FROM reservations"
+            )
+        ]
+
+    def get_movies(self):
+        return [
+            row._asdict()
+            for row in self.session.execute(
+                "SELECT movie_id, title, duration FROM movies"
+            )
+        ]
+
+    def get_cinemas(self):
+        return [
+            row._asdict()
+            for row in self.session.execute(
+                "SELECT cinema_id, name, location FROM cinemas"
+            )
+        ]
+
+    def get_users(self):
+        return [
+            row._asdict()
+            for row in self.session.execute("SELECT user_id, name, email FROM users")
+        ]
+
+    def add_movie(self, title: str, duration: int) -> bool:
+        result = self.session.execute(
+            "INSERT INTO movies (movie_id, title, duration) VALUES (%s, %s, %s) IF NOT EXISTS",
+            (uuid4(), title, duration),
+        )
+        return result.one().applied
+
+    def add_cinema(self, name: str, location: str) -> bool:
+        result = self.session.execute(
+            "INSERT INTO cinemas (cinema_id, name, location) VALUES (%s, %s, %s) IF NOT EXISTS",
+            (uuid4(), name, location),
+        )
+        return result.one().applied
+
+    def add_user(self, name: str, email: str) -> bool:
+        result = self.session.execute(
+            "INSERT INTO users (user_id, name, email) VALUES (%s, %s, %s) IF NOT EXISTS",
+            (uuid4(), name, email),
+        )
+        return result.one().applied
+
+    def cancel_reservation(self, reservation_id: UUID) -> bool:
+        result = self.session.execute(
+            "DELETE FROM reservations WHERE reservation_id = %s IF EXISTS",
+            (reservation_id,),
+        )
+        return result.one().applied
+
+    def cancel_reservations(self, reservation_ids: list[UUID]) -> bool:
+        success = True
+        for reservation_id in reservation_ids:
+            success = self.cancel_reservation(reservation_id) and success
+        return success
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.db = InMemoryDatabase()
+    app.state.db = CassandraDatabase(
+        contact_points=["127.0.0.1", "127.0.0.2"],
+        port=9042,
+        keyspace="cinema",
+    )
     app.state.db.connect()
     try:
         yield
@@ -153,5 +288,5 @@ async def lifespan(app: FastAPI):
         app.state.db.disconnect()
 
 
-def get_db(request: Request) -> InMemoryDatabase:
+def get_db(request: Request) -> Database:
     return request.app.state.db
