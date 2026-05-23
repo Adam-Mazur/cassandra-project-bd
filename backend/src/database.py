@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
 from abc import ABC, abstractmethod
 from uuid import uuid4, UUID
 
@@ -139,3 +141,17 @@ class InMemoryDatabase(Database):
             if not self.cancel_reservation(reservation_id):
                 success = False
         return success
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.db = InMemoryDatabase()
+    app.state.db.connect()
+    try:
+        yield
+    finally:
+        app.state.db.disconnect()
+
+
+def get_db(request: Request) -> InMemoryDatabase:
+    return request.app.state.db

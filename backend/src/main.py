@@ -1,0 +1,84 @@
+from src.schema import CinemaIn, MovieIn, ReservationIn, UserIn, ReservationUpdateIn
+from src.database import InMemoryDatabase, get_db, lifespan
+from fastapi import Depends, FastAPI
+from uuid import UUID
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/")
+def root():
+    return {"status": "ok"}
+
+
+@app.get("/movies")
+def list_movies(db: InMemoryDatabase = Depends(get_db)):
+    return db.get_movies()
+
+
+@app.post("/movies")
+def create_movie(movie: MovieIn, db: InMemoryDatabase = Depends(get_db)):
+    db.add_movie(movie.title, movie.duration)
+    return {"ok": True}
+
+
+@app.get("/cinemas")
+def list_cinemas(db: InMemoryDatabase = Depends(get_db)):
+    return db.get_cinemas()
+
+
+@app.post("/cinemas")
+def create_cinema(cinema: CinemaIn, db: InMemoryDatabase = Depends(get_db)):
+    db.add_cinema(cinema.name, cinema.location)
+    return {"ok": True}
+
+
+@app.get("/users")
+def list_users(db: InMemoryDatabase = Depends(get_db)):
+    return db.get_users()
+
+
+@app.post("/users")
+def create_user(user: UserIn, db: InMemoryDatabase = Depends(get_db)):
+    db.add_user(user.name, user.email)
+    return {"ok": True}
+
+
+@app.get("/reservations")
+def list_reservations(db: InMemoryDatabase = Depends(get_db)):
+    return db.get_reservations()
+
+
+@app.post("/reservations")
+def create_reservation(
+    reservation: ReservationIn, db: InMemoryDatabase = Depends(get_db)
+):
+    reservation_id = db.make_reservation(
+        reservation.user_id,
+        reservation.movie_id,
+        reservation.cinema_id,
+        reservation.seat_number,
+    )
+    return {"reservation_id": reservation_id}
+
+
+@app.delete("/reservations/{reservation_id}")
+def delete_reservation(reservation_id: UUID, db: InMemoryDatabase = Depends(get_db)):
+    return {"ok": db.cancel_reservation(reservation_id)}
+
+
+@app.put("/reservations/{reservation_id}")
+def update_reservation(
+    reservation_id: UUID,
+    update: ReservationUpdateIn,
+    db: InMemoryDatabase = Depends(get_db),
+):
+    return {"ok": db.change_reservation(reservation_id, update.new_seat_number)}
+
+
+@app.delete("/reservations")
+def delete_reservations(
+    reservation_ids: list[UUID], db: InMemoryDatabase = Depends(get_db)
+):
+    return {"ok": db.cancel_reservations(reservation_ids)}
