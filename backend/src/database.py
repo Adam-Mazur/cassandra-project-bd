@@ -46,7 +46,7 @@ class Database(ABC):
         pass
 
     @abstractmethod
-    def add_cinema(name: str, location: str) -> bool:
+    def add_cinema(name: str, location: str, capacity: int) -> bool:
         pass
 
     @abstractmethod
@@ -82,15 +82,22 @@ class InMemoryDatabase(Database):
     def make_reservation(
         self, user_id: UUID, movie_id: UUID, cinema_id: UUID, seat_number: int
     ) -> UUID:
+        cinema = next((c for c in self.cinemas if c["cinema_id"] == cinema_id), None)
+        if cinema is None:
+            raise ValueError("Cinema not found")
+        if seat_number < 1 or seat_number > cinema["capacity"]:
+            raise ValueError(f"Seat {seat_number} out of range (capacity: {cinema['capacity']})")
+        for r in self.reservations:
+            if r["cinema_id"] == cinema_id and r["movie_id"] == movie_id and r["seat_number"] == seat_number:
+                raise ValueError("Seat already taken")
         reservation_id = uuid4()
-        reservation = {
+        self.reservations.append({
             "reservation_id": reservation_id,
             "user_id": user_id,
             "movie_id": movie_id,
             "cinema_id": cinema_id,
             "seat_number": seat_number,
-        }
-        self.reservations.append(reservation)
+        })
         return reservation_id
 
     def change_reservation(self, reservation_id: UUID, new_seat_number: int) -> bool:
@@ -118,9 +125,9 @@ class InMemoryDatabase(Database):
         self.movies.append(movie)
         return True
 
-    def add_cinema(self, name: str, location: str) -> bool:
+    def add_cinema(self, name: str, location: str, capacity: int) -> bool:
         cinema_id = uuid4()
-        cinema = {"cinema_id": cinema_id, "name": name, "location": location}
+        cinema = {"cinema_id": cinema_id, "name": name, "location": location, "capacity": capacity}
         self.cinemas.append(cinema)
         return True
 
@@ -173,7 +180,7 @@ class CassandraDatabase(Database):
             "CREATE TABLE IF NOT EXISTS movies (movie_id uuid PRIMARY KEY, title text, duration int)"
         )
         self.session.execute(
-            "CREATE TABLE IF NOT EXISTS cinemas (cinema_id uuid PRIMARY KEY, name text, location text)"
+            "CREATE TABLE IF NOT EXISTS cinemas (cinema_id uuid PRIMARY KEY, name text, location text, capacity int)"
         )
         self.session.execute(
             "CREATE TABLE IF NOT EXISTS users (user_id uuid PRIMARY KEY, name text, email text)"
@@ -193,6 +200,19 @@ class CassandraDatabase(Database):
     def make_reservation(
         self, user_id: UUID, movie_id: UUID, cinema_id: UUID, seat_number: int
     ) -> UUID:
+        cinema = self.session.execute(
+            "SELECT capacity FROM cinemas WHERE cinema_id = %s", (cinema_id,)
+        ).one()
+        if cinema is None:
+            raise ValueError("Cinema not found")
+        if seat_number < 1 or seat_number > cinema.capacity:
+            raise ValueError(f"Seat {seat_number} out of range (capacity: {cinema.capacity})")
+        taken = self.session.execute(
+            "SELECT reservation_id FROM reservations WHERE cinema_id = %s AND movie_id = %s AND seat_number = %s ALLOW FILTERING",
+            (cinema_id, movie_id, seat_number),
+        ).one()
+        if taken is not None:
+            raise ValueError("Seat already taken")
         reservation_id = uuid4()
         result = self.session.execute(
             "INSERT INTO reservations (reservation_id, user_id, movie_id, cinema_id, seat_number) VALUES (%s, %s, %s, %s, %s) IF NOT EXISTS",
@@ -229,7 +249,7 @@ class CassandraDatabase(Database):
         return [
             row._asdict()
             for row in self.session.execute(
-                "SELECT cinema_id, name, location FROM cinemas"
+                "SELECT cinema_id, name, location, capacity FROM cinemas"
             )
         ]
 
@@ -246,10 +266,10 @@ class CassandraDatabase(Database):
         )
         return result.one().applied
 
-    def add_cinema(self, name: str, location: str) -> bool:
+    def add_cinema(self, name: str, location: str, capacity: int) -> bool:
         result = self.session.execute(
-            "INSERT INTO cinemas (cinema_id, name, location) VALUES (%s, %s, %s) IF NOT EXISTS",
-            (uuid4(), name, location),
+            "INSERT INTO cinemas (cinema_id, name, location, capacity) VALUES (%s, %s, %s, %s) IF NOT EXISTS",
+            (uuid4(), name, location, capacity),
         )
         return result.one().applied
 
