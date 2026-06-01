@@ -1,5 +1,5 @@
-from src.schema import CinemaIn, MovieIn, ReservationIn, UserIn, ReservationUpdateIn
-from src.database import Database, get_db, lifespan
+from backend.schema import CinemaIn, MovieIn, ReservationIn, UserIn, ReservationUpdateIn
+from backend.database import Database, get_db, lifespan
 from fastapi import Depends, FastAPI
 from uuid import UUID
 

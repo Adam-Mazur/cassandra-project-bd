@@ -1,45 +1,34 @@
-# project big data
+# Big data project
 
+## Running
 
-## reset database
+### Setup 
 
-docker exec cas1 cqlsh -e "DROP KEYSPACE cinema;"
-
-
-## running
-
-### setup 
-
+```sh
 docker compose up
 uv sync
+```
 
-### backend
+### Backend
 
-Później, po paru minutach:
+After a few minutes:
 
-cd backend
-uv run -m fastapi src/main.py
+```sh
+uv run -m fastapi run backend/main.py
+```
 
+### Admin
+```sh
+uv run streamlit run admin/app.py
+```
 
-### admin
-cd admin
-uv run streamlit run app.py
+### User
+```sh
+uv run streamlit run user/app.py
+```
 
+## Reset database
 
-### user
-cd user
-uv run streamlit run app.py
-
-## dependencies
-
-Single `uv.lock` at the root manages all three components as a uv workspace:
-
-- `backend` — FastAPI + cassandra-driver
-- `admin` — Streamlit + httpx
-- `user` — Streamlit + httpx
-
-To install deps for a specific component: `uv sync --package backend` (or `admin` / `user`).
-
-
-
- 
+```sh
+docker exec cas1 cqlsh -e "DROP KEYSPACE cinema;"
+```
