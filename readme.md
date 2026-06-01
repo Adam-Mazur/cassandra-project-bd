@@ -27,6 +27,15 @@ uv run streamlit run admin/app.py
 uv run streamlit run user/app.py
 ```
 
+### pen-tests
+```
+uv run pytest stress_test/ -v -s
+```
+-v — shows each test name and pass/fail
+-s — lets the print() output from test 4 (seat split) show in the terminal
+
+
+
 ## Reset database
 
 ```sh
