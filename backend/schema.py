@@ -27,3 +27,10 @@ class ReservationIn(BaseModel):
 
 class ReservationUpdateIn(BaseModel):
     new_seat_number: int
+
+
+class BulkReservationIn(BaseModel):
+    user_id: UUID
+    movie_id: UUID
+    cinema_id: UUID
+    seat_numbers: list[int]

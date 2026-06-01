@@ -73,6 +73,15 @@ class ReservationStressTests(unittest.TestCase):
         })
         return r.status_code == 200 and r.json().get("reservation_id") is not None
 
+    def _reserve_bulk(self, user_id, seat_numbers):
+        r = _post("/reservations/bulk", {
+            "user_id": str(user_id),
+            "movie_id": str(self.movie_id),
+            "cinema_id": str(self.cinema_id),
+            "seat_numbers": seat_numbers,
+        })
+        return [item["seat_number"] for item in r.json()["results"] if item["success"]]
+
     # Test 1: backend alive 
     def test_1_backend_alive(self):
         r = httpx.get(f"{BASE_URL}/", timeout=TIMEOUT)
@@ -96,20 +105,14 @@ class ReservationStressTests(unittest.TestCase):
         self.assertFalse(second, "Duplicate reservation should be rejected")
 
     # Test 4: two users race for every seat — no seat double-booked
-    def test_4_two_users_race_for_all_seatsss(self):
+    def test_4_two_users_race_for_all_seats(self):
         self._clear_reservations()
 
         results_a, results_b = [], []
+        all_seats = list(range(1, self.capacity + 1))
 
-        def book_all(user_id, results):
-            for seat in range(1, self.capacity + 1):
-                if seat == 100:
-                    print(f"User {user_id} trying to book seat {seat}...")
-                if self._reserve(user_id, seat):
-                    results.append(seat)
-
-        t_a = threading.Thread(target=book_all, args=(self.user_a_id, results_a))
-        t_b = threading.Thread(target=book_all, args=(self.user_b_id, results_b))
+        t_a = threading.Thread(target=lambda: results_a.extend(self._reserve_bulk(self.user_a_id, all_seats)))
+        t_b = threading.Thread(target=lambda: results_b.extend(self._reserve_bulk(self.user_b_id, all_seats)))
 
         t_a.start()
         t_b.start()

@@ -46,6 +46,15 @@ def create_user(name: str, email: str) -> dict:
     return _post("/users", {"name": name, "email": email})
 
 
+def make_reservations_bulk(user_id: str, movie_id: str, cinema_id: str, seat_numbers: list[int]) -> dict:
+    return _post("/reservations/bulk", {
+        "user_id": user_id,
+        "movie_id": movie_id,
+        "cinema_id": cinema_id,
+        "seat_numbers": seat_numbers,
+    })
+
+
 def make_reservation(user_id: str, movie_id: str, cinema_id: str, seat_number: int) -> dict:
     return _post("/reservations", {
         "user_id": user_id,

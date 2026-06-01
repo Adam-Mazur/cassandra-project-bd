@@ -1,4 +1,4 @@
-from backend.schema import CinemaIn, MovieIn, ReservationIn, UserIn, ReservationUpdateIn
+from backend.schema import CinemaIn, MovieIn, ReservationIn, UserIn, ReservationUpdateIn, BulkReservationIn
 from backend.database import Database, get_db, lifespan
 from fastapi import Depends, FastAPI
 from uuid import UUID
@@ -59,6 +59,16 @@ def create_reservation(reservation: ReservationIn, db: Database = Depends(get_db
         reservation.seat_number,
     )
     return {"reservation_id": reservation_id}
+
+
+@app.post("/reservations/bulk")
+def create_reservations_bulk(reservation: BulkReservationIn, db: Database = Depends(get_db)):
+    return {"results": db.make_reservations(
+        reservation.user_id,
+        reservation.movie_id,
+        reservation.cinema_id,
+        reservation.seat_numbers,
+    )}
 
 
 @app.delete("/reservations/{reservation_id}")

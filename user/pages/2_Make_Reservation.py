@@ -121,21 +121,18 @@ st.divider()
 st.write(f"Selected: **{sorted(selected_seats)}**")
 
 if st.button("Confirm Reservation", type="primary", key="confirm"):
-    success, failed = [], []
-    for seat in (selected_seats):
-        try:
-            result = api.make_reservation(
-                user_id=user["user_id"],
-                movie_id=movie_id,
-                cinema_id=cinema_id,
-                seat_number=seat,
-            )
-            if result.get("reservation_id"):
-                success.append(seat)
-            else:
-                failed.append(seat)
-        except (ConnectionError, RuntimeError):
-            failed.append(seat)
+    try:
+        result = api.make_reservations_bulk(
+            user_id=user["user_id"],
+            movie_id=movie_id,
+            cinema_id=cinema_id,
+            seat_numbers=sorted(selected_seats),
+        )
+        success = [r["seat_number"] for r in result["results"] if r["success"]]
+        failed = [r["seat_number"] for r in result["results"] if not r["success"]]
+    except (ConnectionError, RuntimeError) as e:
+        st.error(str(e))
+        st.stop()
 
     st.session_state[state_key] = set()
 

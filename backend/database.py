@@ -4,6 +4,7 @@ from cassandra.cluster import Cluster
 from fastapi import FastAPI, Request
 from abc import ABC, abstractmethod
 from uuid import uuid4, UUID
+import numpy as np
 
 
 class Database(ABC):
@@ -60,6 +61,20 @@ class Database(ABC):
     @abstractmethod
     def cancel_reservations(reservation_ids: list[UUID]) -> bool:
         pass
+
+    def make_reservations(
+        self, user_id: UUID, movie_id: UUID, cinema_id: UUID, seat_numbers: list[int]
+    ) -> list[dict]:
+        results = []
+        seat_numbers = np.random.permutation(seat_numbers).tolist()  
+        for seat_number in seat_numbers:
+            reservation_id = self.make_reservation(user_id, movie_id, cinema_id, seat_number)
+            results.append({
+                "seat_number": seat_number,
+                "reservation_id": reservation_id,
+                "success": reservation_id is not None,
+            })
+        return results
 
 
 class InMemoryDatabase(Database):
