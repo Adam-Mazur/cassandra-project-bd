@@ -110,11 +110,11 @@ class InMemoryDatabase(Database):
         return reservation_id
 
     def change_reservation(self, reservation_id: UUID, new_seat_number: int) -> bool:
-        if new_seat_number < 0:
+        if new_seat_number < 1:
             return False
         for cinema in self.cinemas:
             if cinema["cinema_id"] == reservation_id:
-                if new_seat_number >= cinema["capacity"]:
+                if new_seat_number > cinema["capacity"]:
                     return False
                 break
 
@@ -219,7 +219,15 @@ class CassandraDatabase(Database):
             "CREATE TABLE IF NOT EXISTS users (user_id uuid PRIMARY KEY, name text, email text)"
         )
         self.session.execute(
-            "CREATE TABLE IF NOT EXISTS reservations (reservation_id uuid PRIMARY KEY, user_id uuid, movie_id uuid, cinema_id uuid, seat_number int)"
+            "CREATE TABLE IF NOT EXISTS reservations ("
+            "movie_id uuid, cinema_id uuid, seat_number int, "
+            "reservation_id uuid, user_id uuid, "
+            "PRIMARY KEY ((movie_id, cinema_id), seat_number))"
+        )
+        self.session.execute(
+            "CREATE TABLE IF NOT EXISTS reservations_by_id ("
+            "reservation_id uuid PRIMARY KEY, "
+            "movie_id uuid, cinema_id uuid, seat_number int)"
         )
 
     def disconnect(self):
@@ -240,62 +248,69 @@ class CassandraDatabase(Database):
             "SELECT cinema_id, capacity FROM cinemas WHERE cinema_id = %s",
             (cinema_id,),
         ).one()
-        if cinema is None or cinema.capacity is None or seat_number >= cinema.capacity:
-            return None
-
-        occupied = self.session.execute(
-            "SELECT reservation_id FROM reservations WHERE movie_id = %s AND cinema_id = %s AND seat_number = %s ALLOW FILTERING",
-            (movie_id, cinema_id, seat_number),
-        ).one()
-        if occupied is not None:
+        if cinema is None or cinema.capacity is None or seat_number > cinema.capacity:
             return None
 
         reservation_id = uuid4()
         result = self.session.execute(
-            "INSERT INTO reservations (reservation_id, user_id, movie_id, cinema_id, seat_number) VALUES (%s, %s, %s, %s, %s) IF NOT EXISTS",
-            (reservation_id, user_id, movie_id, cinema_id, seat_number),
+            "INSERT INTO reservations (movie_id, cinema_id, seat_number, reservation_id, user_id) "
+            "VALUES (%s, %s, %s, %s, %s) IF NOT EXISTS",
+            (movie_id, cinema_id, seat_number, reservation_id, user_id),
         )
         if not result.one().applied:
             return None
+        self.session.execute(
+            "INSERT INTO reservations_by_id (reservation_id, movie_id, cinema_id, seat_number) "
+            "VALUES (%s, %s, %s, %s)",
+            (reservation_id, movie_id, cinema_id, seat_number),
+        )
         return reservation_id
 
     def change_reservation(self, reservation_id: UUID, new_seat_number: int) -> bool:
         if new_seat_number < 0:
             return False
 
-        reservation = self.session.execute(
-            "SELECT reservation_id, movie_id, cinema_id, seat_number FROM reservations WHERE reservation_id = %s",
+        lookup = self.session.execute(
+            "SELECT movie_id, cinema_id, seat_number FROM reservations_by_id WHERE reservation_id = %s",
             (reservation_id,),
+        ).one()
+        if lookup is None:
+            return False
+
+        reservation = self.session.execute(
+            "SELECT user_id FROM reservations WHERE movie_id = %s AND cinema_id = %s AND seat_number = %s",
+            (lookup.movie_id, lookup.cinema_id, lookup.seat_number),
         ).one()
         if reservation is None:
             return False
 
         cinema = self.session.execute(
-            "SELECT cinema_id, capacity FROM cinemas WHERE cinema_id = %s",
-            (reservation.cinema_id,),
+            "SELECT capacity FROM cinemas WHERE cinema_id = %s",
+            (lookup.cinema_id,),
         ).one()
-        if (
-            cinema is None
-            or cinema.capacity is None
-            or new_seat_number >= cinema.capacity
-        ):
+        if cinema is None or cinema.capacity is None or new_seat_number > cinema.capacity:
             return False
 
-        if reservation.seat_number == new_seat_number:
+        if lookup.seat_number == new_seat_number:
             return True
 
-        occupied = self.session.execute(
-            "SELECT reservation_id FROM reservations WHERE movie_id = %s AND cinema_id = %s AND seat_number = %s ALLOW FILTERING",
-            (reservation.movie_id, reservation.cinema_id, new_seat_number),
-        ).one()
-        if occupied is not None and occupied.reservation_id != reservation_id:
+        result = self.session.execute(
+            "INSERT INTO reservations (movie_id, cinema_id, seat_number, reservation_id, user_id) "
+            "VALUES (%s, %s, %s, %s, %s) IF NOT EXISTS",
+            (lookup.movie_id, lookup.cinema_id, new_seat_number, reservation_id, reservation.user_id),
+        )
+        if not result.one().applied:
             return False
 
-        result = self.session.execute(
-            "UPDATE reservations SET seat_number = %s WHERE reservation_id = %s IF EXISTS",
+        self.session.execute(
+            "DELETE FROM reservations WHERE movie_id = %s AND cinema_id = %s AND seat_number = %s",
+            (lookup.movie_id, lookup.cinema_id, lookup.seat_number),
+        )
+        self.session.execute(
+            "UPDATE reservations_by_id SET seat_number = %s WHERE reservation_id = %s",
             (new_seat_number, reservation_id),
         )
-        return result.one().applied
+        return True
 
     def get_reservations(self):
         return [
@@ -349,11 +364,23 @@ class CassandraDatabase(Database):
         return result.one().applied
 
     def cancel_reservation(self, reservation_id: UUID) -> bool:
-        result = self.session.execute(
-            "DELETE FROM reservations WHERE reservation_id = %s IF EXISTS",
+        row = self.session.execute(
+            "SELECT movie_id, cinema_id, seat_number FROM reservations_by_id WHERE reservation_id = %s",
             (reservation_id,),
+        ).one()
+        if row is None:
+            return False
+        result = self.session.execute(
+            "DELETE FROM reservations WHERE movie_id = %s AND cinema_id = %s AND seat_number = %s IF EXISTS",
+            (row.movie_id, row.cinema_id, row.seat_number),
         )
-        return result.one().applied
+        if result.one().applied:
+            self.session.execute(
+                "DELETE FROM reservations_by_id WHERE reservation_id = %s",
+                (reservation_id,),
+            )
+            return True
+        return False
 
     def cancel_reservations(self, reservation_ids: list[UUID]) -> bool:
         success = True
