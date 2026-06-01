@@ -31,4 +31,5 @@ uv run streamlit run user/app.py
 
 ```sh
 docker exec cas1 cqlsh -e "DROP KEYSPACE cinema;"
+docker exec cas1 cqlsh -e "CREATE KEYSPACE cinema WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 2};"
 ```

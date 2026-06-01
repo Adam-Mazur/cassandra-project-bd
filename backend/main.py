@@ -30,7 +30,7 @@ def list_cinemas(db: Database = Depends(get_db)):
 
 @app.post("/cinemas")
 def create_cinema(cinema: CinemaIn, db: Database = Depends(get_db)):
-    db.add_cinema(cinema.name, cinema.location)
+    db.add_cinema(cinema.name, cinema.location, cinema.capacity)
     return {"ok": True}
 
 

@@ -10,6 +10,7 @@ class MovieIn(BaseModel):
 class CinemaIn(BaseModel):
     name: str
     location: str
+    capacity: int
 
 
 class UserIn(BaseModel):
