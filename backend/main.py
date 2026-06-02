@@ -1,10 +1,21 @@
 from backend.schema import CinemaIn, MovieIn, ReservationIn, UserIn, ReservationUpdateIn, BulkReservationIn
 from backend.database import Database, get_db, lifespan
-from fastapi import Depends, FastAPI
+from cassandra import OperationTimedOut, Unavailable
+from cassandra.cluster import NoHostAvailable
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.requests import Request
+from fastapi.responses import JSONResponse
 from uuid import UUID
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.exception_handler(NoHostAvailable)
+@app.exception_handler(OperationTimedOut)
+@app.exception_handler(Unavailable)
+async def cassandra_error_handler(request: Request, exc: Exception):
+    return JSONResponse(status_code=503, content={"detail": "Database unavailable"})
 
 
 @app.get("/")
@@ -58,6 +69,8 @@ def create_reservation(reservation: ReservationIn, db: Database = Depends(get_db
         reservation.cinema_id,
         reservation.seat_number,
     )
+    if reservation_id is None:
+        raise HTTPException(status_code=409, detail="Seat already taken or invalid")
     return {"reservation_id": reservation_id}
 
 
