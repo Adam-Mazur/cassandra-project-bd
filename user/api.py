@@ -88,3 +88,14 @@ def cancel_reservation(reservation_id: str) -> dict:
         raise ConnectionError(f"Cannot connect to backend at {BASE_URL}")
     except httpx.HTTPStatusError as e:
         raise RuntimeError(f"Backend error {e.response.status_code}: {e.response.text}")
+
+
+def cancel_reservations(reservation_ids: list[str]) -> dict:
+    try:
+        r = httpx.request("DELETE", f"{BASE_URL}/reservations", json=reservation_ids, timeout=TIMEOUT)
+        r.raise_for_status()
+        return r.json()
+    except httpx.ConnectError:
+        raise ConnectionError(f"Cannot connect to backend at {BASE_URL}")
+    except httpx.HTTPStatusError as e:
+        raise RuntimeError(f"Backend error {e.response.status_code}: {e.response.text}")
