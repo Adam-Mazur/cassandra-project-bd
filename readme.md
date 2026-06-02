@@ -3,6 +3,8 @@
 ## short description
 A cinema reservation system built on **Apache Cassandra** (via Docker), demonstrating distributed database design for a Big Data course. The project includes a **FastAPI REST** backend, an admin panel (**Streamlit**) for managing cinemas, movies, and screenings, a user panel for browsing and reserving seats, and a suite of **stress tests** using multithreading to simulate concurrent reservations, bulk cancellations, and fault-tolerance under node failure.
 
+The full projects report can be seen in the **REPORT.md** file
+
 
 ## Running
 
