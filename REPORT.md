@@ -2,12 +2,17 @@
 ## backend 
 ### description
 
+We used FastAPI to build the backend API, which provides endpoints for managing movies, cinemas, users, and reservations. The backend was designed to be modular and easy to test. We created an abstract class called `Database` that defines the interface for all database operations, and implemented a concrete `InMemoryDatabase` for testing and a `CassandraDatabase` for production use. This separation allows us to quickly test the API logic without needing a live Cassandra instance, while still ensuring a scalable and robust database layer for real-world usage.
 
 
 ### database structure
 
-
-
+The database schema consists of five tables:
+- `movies` — stores movie information (id, title, duration).
+- `cinemas` — stores cinema information (id, name, location, seat capacity).
+- `users` — stores user information (id, name, email).
+- `reservations` — stores reservations with a composite primary key of (movie_id, cinema_id, seat_number) to prevent double-booking via Cassandra's lightweight transactions.
+- `reservations_by_id` — a reverse-lookup table that maps reservation_id to its corresponding movie_id, cinema_id, and seat_number, enabling efficient reservation management by ID.
 
 
 ## frontend
