@@ -14,6 +14,10 @@ The database schema consists of five tables:
 - `reservations` — stores reservations with a composite primary key of (movie_id, cinema_id, seat_number) to prevent double-booking via Cassandra's lightweight transactions.
 - `reservations_by_id` — a reverse-lookup table that maps reservation_id to its corresponding movie_id, cinema_id, and seat_number, enabling efficient reservation management by ID.
 
+![alt text](assets/backend-1.png)
+
+![alt text](assets/backend-2.png)
+
 
 ## frontend
 
@@ -23,10 +27,25 @@ The frontend is divided into two separate Streamlit applications: an **admin pan
 
 The admin panel opens on a dashboard that displays live counts of movies, cinemas, users, and active reservations. It has four subpages:
 
+![Description](assets/admin-1.png)
+
 - **Movies** — add a new movie by entering its title and duration. All existing movies are displayed in a table below.
+![Description](assets/admin-4.png)
+
+
 - **Cinemas** — add a new cinema with a name, location, and seat capacity. All existing cinemas are listed in a table.
+![Description](assets/admin-5.png)
+
+
 - **Users** — view a table of all registered users.
+![Description](assets/admin-2.png)
+
+
 - **Reservations** — view all reservations across the system with human-readable labels (user name, movie title, cinema name, seat number, reservation ID).
+![Description](assets/admin-3.png)
+
+
+
 
 ### user
 
@@ -34,7 +53,12 @@ The user panel requires logging before any booking action is available. It has t
 
 - **Account** — log in with an email address or register a new account with a name and email. The session is stored in Streamlit session state and a logout button is provided.
 - **Make Reservation** — select a movie and a cinema, then pick seats from an interactive visual grid. Free seats are shown in green, currently selected seats in blue, and already occupied seats are greyed out and disabled. Multiple seats can be selected at once and confirmed as a bulk reservation in one click.
+![Description](assets/user-1.png)
+
+
 - **My Reservations** — displays the user's seats for a selected showing in the same grid layout. Seats can be clicked to mark them for cancellation (highlighted in red), then cancelled all at once. There is also a form to change an existing reservation to a different seat number.
+![Description](assets/user-2.png)
+
 
 
 ## stress test 
